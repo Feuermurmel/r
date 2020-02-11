@@ -19,11 +19,20 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
+        '--init',
+        action='store_true')
+
+    parser.add_argument(
         'cmdline',
         nargs='...',
         help='The command to execute with the remote shell.')
 
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    if args.init and args.cmdline:
+        parser.error('Cannot use --init together with a command line.')
+
+    return args
 
 
 def bash_escape_string(string):
@@ -87,52 +96,69 @@ def load_config():
         path_ignores=path_ignores)
 
 
-def main(cmdline):
-    config = load_config()
+def main(init, cmdline):
+    if init:
+        config_path = pathlib.Path('r.toml')
 
-    # Path of the current working directory relative to the directory
-    # containing the config file.
-    relative_path = pathlib.Path().resolve().relative_to(config.root_directory)
+        if config_path.exists():
+            raise UserError(f'Config file {config_path} already exists.')
 
-    def run_unison():
-        def iter_ignore_args():
-            ignore_sets = [
-                ('Name', config.name_ignores),
-                ('Path', config.path_ignores)]
+        print('Please enter the address of the remote directory in the form <hostname>:<path>:')
+        remote = input('? ')
 
-            for type, ignores in ignore_sets:
-                for ignore in ignores:
-                    yield '-ignore'
-                    yield type + ' ' + ignore
+        config=dict(remote=remote, ignores=[])
 
-        unison_cmd = [
-            'unison',
-            '-batch',
-            '-silent',
-            # '-confirmbigdel=false',
-            '-copyonconflict',
-            '-prefer=newer',
-            *iter_ignore_args(),
-            str(config.root_directory),
-            'ssh://{}/{}'.format(config.remote_host, config.remote_path)]
+        log(f'Saving configuration to {config_path} ...')
 
-        exit_code = subprocess.call(unison_cmd, stdin=None)
+        with config_path.open('w', encoding='utf-8') as file:
+            toml.dump(config, file)
+    else:
+        config = load_config()
 
-        if exit_code:
-            raise UserError('Command failed: {}'.format(' '.join(unison_cmd)))
+        # Path of the current working directory relative to the directory
+        # containing the config file.
+        relative_path = pathlib.Path().resolve().relative_to(config.root_directory)
 
-    def run_ssh():
-        remote_dir = config.remote_path / relative_path
-        cmdline_str = ' '.join(bash_escape_string(i) for i in cmdline)
-        command = 'cd {}; {}'.format(remote_dir, cmdline_str)
+        def run_unison():
+            def iter_ignore_args():
+                ignore_sets = [
+                    ('Name', config.name_ignores),
+                    ('Path', config.path_ignores)]
 
-        return subprocess.call(['ssh', config.remote_host, command])
+                for type, ignores in ignore_sets:
+                    for ignore in ignores:
+                        yield '-ignore'
+                        yield type + ' ' + ignore
 
-    run_unison()
-    exit_code = run_ssh()
-    run_unison()
+            unison_cmd = [
+                'unison',
+                '-batch',
+                '-silent',
+                # '-confirmbigdel=false',
+                '-logfile=/dev/null',
+                '-copyonconflict',
+                '-prefer=newer',
+                *iter_ignore_args(),
+                str(config.root_directory),
+                'ssh://{}/{}'.format(config.remote_host, config.remote_path)]
 
-    sys.exit(exit_code)
+            exit_code = subprocess.call(unison_cmd, stdin=None)
+
+            if exit_code:
+                raise UserError('Command failed: {}'.format(' '.join(unison_cmd)))
+
+        def run_ssh():
+            remote_dir = config.remote_path / relative_path
+            cmdline_str = ' '.join(bash_escape_string(i) for i in cmdline)
+            command = 'cd {}; {}'.format(remote_dir, cmdline_str)
+
+            return subprocess.call(['ssh', config.remote_host, command])
+
+        run_unison()
+        exit_code = run_ssh()
+        run_unison()
+
+        sys.exit(exit_code)
 
 
 def entry_point():
