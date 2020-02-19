@@ -1,8 +1,10 @@
 import argparse
+import os
 import pathlib
 import re
 import subprocess
 import sys
+import threading
 
 import toml
 
@@ -136,8 +138,6 @@ def main(init, cmdline):
             unison_cmd = [
                 'unison',
                 '-batch',
-                '-silent',
-                # '-confirmbigdel=false',
                 '-logfile=/dev/null',
                 '-copyonconflict',
                 '-prefer=newer',
@@ -145,9 +145,32 @@ def main(init, cmdline):
                 str(config.root_directory),
                 'ssh://{}/{}'.format(config.remote_host, config.remote_path)]
 
-            exit_code = subprocess.call(unison_cmd, stdin=None)
+            stderr_read, stderr_write = os.pipe()
+            stderr_lines = []
+
+            def consume_stderr():
+                f = os.fdopen(stderr_read, 'r')
+
+                for i in f:
+                    stderr_lines.append(i)
+
+                    if i.startswith('[BGN] '):
+                        log(i[6:].rstrip())
+
+            consume_stderr_thread = threading.Thread(target=consume_stderr, daemon=True)
+            consume_stderr_thread.start()
+
+            try:
+                exit_code = subprocess.call(unison_cmd, stdin=None, stdout=subprocess.DEVNULL, stderr=stderr_write)
+            finally:
+                os.close(stderr_read)
+                os.close(stderr_write)
+                consume_stderr_thread.join()
 
             if exit_code:
+                for i in stderr_lines:
+                    print(i, file=sys.stderr, end='')
+
                 raise UserError('Command failed: {}'.format(' '.join(unison_cmd)))
 
         def run_ssh():
