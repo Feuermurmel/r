@@ -176,7 +176,7 @@ def main(init, cmdline):
         def run_ssh():
             remote_dir = config.remote_path / relative_path
             cmdline_str = ' '.join(bash_escape_string(i) for i in cmdline)
-            command = 'cd {}; {}'.format(remote_dir, cmdline_str)
+            command = 'cd {} && {}'.format(remote_dir, cmdline_str)
 
             return subprocess.call(['ssh', config.remote_host, command])
 
