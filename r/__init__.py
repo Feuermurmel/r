@@ -8,7 +8,7 @@ import toml
 
 
 def log(message, *args):
-    print(message.format(*args), file=sys.stderr, flush=True)
+    print('r:', message.format(*args), file=sys.stderr, flush=True)
 
 
 class UserError(Exception):
