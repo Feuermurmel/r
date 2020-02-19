@@ -7,6 +7,9 @@ import sys
 import toml
 
 
+default_name_ignores = ['.DS_Store', '._*']
+
+
 def log(message, *args):
     print('r:', message.format(*args), file=sys.stderr, flush=True)
 
@@ -122,7 +125,7 @@ def main(init, cmdline):
         def run_unison():
             def iter_ignore_args():
                 ignore_sets = [
-                    ('Name', config.name_ignores),
+                    ('Name', config.name_ignores + default_name_ignores),
                     ('Path', config.path_ignores)]
 
                 for type, ignores in ignore_sets:
