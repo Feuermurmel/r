@@ -178,7 +178,7 @@ def main(init, cmdline):
             cmdline_str = ' '.join(bash_escape_string(i) for i in cmdline)
             command = 'cd {} && {}'.format(remote_dir, cmdline_str)
 
-            return subprocess.call(['ssh', config.remote_host, command])
+            return subprocess.call(['ssh', '-t', config.remote_host, command])
 
         run_unison()
         exit_code = run_ssh()
